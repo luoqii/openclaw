@@ -86,7 +86,7 @@ jobs:
           cat > "$artifact_dir/INSTALL.txt" <<'EOF'
           OpenClaw Android debug APK install notes
 
-          - Requires Android 12 or newer (minSdk 31).
+          - Requires Android 11 or newer (minSdk 30).
           - Package name: ai.openclaw.app
           - This CI artifact is a debug build.
           - If install/update fails because an older app with a different signature is present,
