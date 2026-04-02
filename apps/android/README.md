@@ -159,7 +159,7 @@ Then in app **Connect → Manual**:
 
 This app is native Kotlin + Jetpack Compose.
 
-- For Compose UI edits: use Android Studio **Live Edit** on a debug build (works on physical devices; project `minSdk=31` already meets API requirement).
+- For Compose UI edits: use Android Studio **Live Edit** on a debug build (works on physical devices; app `minSdk=30` already meets API requirement).
 - For many non-structural code/resource changes: use Android Studio **Apply Changes**.
 - For structural/native/manifest/Gradle changes: do full reinstall (`pnpm android:run`).
 - Canvas web content already supports live reload when loaded from Gateway `__openclaw__/canvas/` (see `docs/platforms/android.md`).

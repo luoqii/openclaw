@@ -1,0 +1,106 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/android-apk.yml
+      - apps/android/**
+      - apps/shared/OpenClawKit/Sources/OpenClawKit/Resources/**
+  pull_request:
+    paths:
+      - .github/workflows/android-apk.yml
+      - apps/android/**
+      - apps/shared/OpenClawKit/Sources/OpenClawKit/Resources/**
+
+concurrency:
+  group: android-apk-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: false
+
+      - name: Restore stable debug keystore
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: openclaw-android-debug-keystore-v1
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK cmdline-tools
+        run: |
+          set -euo pipefail
+          ANDROID_SDK_ROOT="$HOME/.android-sdk"
+          CMDLINE_TOOLS_VERSION="12266719"
+          ARCHIVE="commandlinetools-linux-${CMDLINE_TOOLS_VERSION}_latest.zip"
+          URL="https://dl.google.com/android/repository/${ARCHIVE}"
+
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          curl -fsSL "$URL" -o "/tmp/${ARCHIVE}"
+          rm -rf "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          unzip -q "/tmp/${ARCHIVE}" -d "$ANDROID_SDK_ROOT/cmdline-tools"
+          mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: 8.11.1
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --sdk_root="${ANDROID_SDK_ROOT}" --licenses >/dev/null
+          sdkmanager --sdk_root="${ANDROID_SDK_ROOT}" --install \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
+
+      - name: Build debug APK
+        working-directory: apps/android
+        run: ./gradlew --no-daemon :app:assembleDebug
+
+      - name: Prepare APK artifact bundle
+        run: |
+          set -euo pipefail
+          artifact_dir="$RUNNER_TEMP/android-apk"
+          mkdir -p "$artifact_dir"
+          cp apps/android/app/build/outputs/apk/debug/*.apk "$artifact_dir/"
+          cat > "$artifact_dir/INSTALL.txt" <<'EOF'
+          OpenClaw Android debug APK install notes
+
+          - Requires Android 11 or newer (minSdk 30).
+          - Package name: ai.openclaw.app
+          - This CI artifact is a debug build.
+          - If install/update fails because an older app with a different signature is present,
+            uninstall the existing OpenClaw app first, then install this APK again.
+          EOF
+          (
+            cd "$artifact_dir"
+            sha256sum *.apk INSTALL.txt > SHA256SUMS.txt
+          )
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: openclaw-android-apk-${{ github.run_number }}
+          path: ${{ runner.temp }}/android-apk/
+          if-no-files-found: error
+          retention-days: 14
